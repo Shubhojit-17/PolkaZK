@@ -1,0 +1,50 @@
+# Build artifacts
+target/
+out/
+cache/
+
+# Keep compiled PVM binaries for hackathon submission
+!contracts/rust-verifier/target/
+contracts/rust-verifier/target/*
+!contracts/rust-verifier/target/polkazk-verifier.release.polkavm
+!contracts/solidity-frontend/output/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+package-lock.json
+.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Foundry
+broadcast/
+
+# Large ceremony/proving files
+*.ptau
+*.zkey
+*.wtns
+
+# Generated PAPI descriptors
+.papi/
+
+# Build logs
+*.log
+frontend-build.log
+
+# Circom generated JS
+test/circom/multiply_js/

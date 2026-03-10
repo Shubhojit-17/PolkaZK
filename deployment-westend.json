@@ -1,0 +1,16 @@
+{
+  "network": "westend",
+  "rpc": "https://westend-asset-hub-eth-rpc.polkadot.io",
+  "deployer": "0x73704bf52A0897cBc35223bBCc7EB7eF55dF44b7",
+  "rustVerifier": "0x82280e886dfc57f4976c0b6ad5fe62bd667c254e",
+  "votingContract": "0xafa9560c0c67e0cb42e0dcf3e833a5fdac0b7d7f",
+  "timestamp": "2026-03-10T22:06:00.000Z",
+  "deployTxHashes": {
+    "rustVerifier": "0xf36119033b51ace9a9f9d28d3710c0a77390dd3c7a9762219b8713e2f41e7ef0",
+    "votingContract": "0xf69fbc4f84e9219c608fea6c727b1fd51f0954cbc591c8cb5bda9e314c05c446"
+  },
+  "gasUsed": {
+    "rustVerifier": 3423081915,
+    "votingContract": 2648651727
+  }
+}

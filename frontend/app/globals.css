@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --polka-pink: #e6007a;
+  --polka-dark: #1a1a2e;
+  --polka-card: #16213e;
+  --polka-accent: #0f3460;
+}
+
+body {
+  background: var(--polka-dark);
+  color: #e0e0e0;
+}
