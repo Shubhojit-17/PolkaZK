@@ -9,13 +9,12 @@
     "deploy:local": "node scripts/deploy.js --network local",
     "deploy:westend": "node scripts/deploy.js --network westend",
     "test:integration": "node scripts/integration-test.js",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "dev": "npm run dev:backend & npm run dev:frontend",
-    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
+    "dev:frontend": "pnpm --filter polkazk-frontend dev",
+    "dev:backend": "pnpm --filter polkazk-backend dev",
+    "dev": "pnpm run dev:backend & pnpm run dev:frontend",
+    "install:all": "pnpm install"
   },
   "dependencies": {
-    "@polkadot-api/descriptors": "file:.papi\\descriptors",
     "dotenv": "^16.4.0",
     "ethers": "^6.13.0",
     "polkadot-api": "^1.23.3",
