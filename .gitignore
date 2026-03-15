@@ -26,6 +26,9 @@ node_modules/
 package-lock.json
 .next/
 
+# pnpm
+pnpm-lock.yaml
+
 # Environment
 .env
 .env.local
