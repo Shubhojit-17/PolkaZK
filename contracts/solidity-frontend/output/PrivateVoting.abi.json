@@ -32,6 +32,11 @@
   },
   {
     "inputs": [],
+    "name": "ProposalCooldown",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ProposalNotFound",
     "type": "error"
   },
@@ -252,6 +257,25 @@
       {
         "internalType": "uint256",
         "name": "totalVotes",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "lastProposalTime",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
         "type": "uint256"
       }
     ],

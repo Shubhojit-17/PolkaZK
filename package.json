@@ -9,7 +9,10 @@
     "deploy:local": "node scripts/deploy.js --network local",
     "deploy:westend": "node scripts/deploy.js --network westend",
     "test:integration": "node scripts/integration-test.js",
-    "dev:frontend": "cd frontend && npm run dev"
+    "dev:frontend": "cd frontend && npm run dev",
+    "demo:prep": "npm run generate:proof",
+    "demo:smoke": "node scripts/integration-test.js --network westend",
+    "demo:frontend": "npm run dev:frontend"
   },
   "dependencies": {
     "@polkadot-api/descriptors": "file:.papi\\descriptors",

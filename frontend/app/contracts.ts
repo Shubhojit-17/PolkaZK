@@ -15,13 +15,15 @@ export const CHAIN_CONFIG = {
 
 // Update these after deploying contracts
 export const CONTRACTS = {
-  rustVerifier: process.env.NEXT_PUBLIC_RUST_VERIFIER || "0x82280e886dfc57f4976c0b6ad5fe62bd667c254e",
-  privateVoting: process.env.NEXT_PUBLIC_VOTING_CONTRACT || "0xafa9560c0c67e0cb42e0dcf3e833a5fdac0b7d7f",
+  rustVerifier: process.env.NEXT_PUBLIC_RUST_VERIFIER || "0xac32d86d7061C8dC4962e0e401459C079E3Ca7E3",
+  privateVoting: process.env.NEXT_PUBLIC_VOTING_CONTRACT || "0x47b6a6bb66eF206ca0D90Ead98b3d8Db6f406CFe",
 };
 
 export const RUST_VERIFIER_ABI = [
   "function verify(bytes calldata proof, bytes calldata publicInputs) external returns (bool)",
+  "function storeVerificationKey(bytes calldata vk) external",
   "event ProofVerified(address indexed submitter, bool result)",
+  "event VerificationKeyStored(address indexed submitter, bytes32 vkHash)",
 ];
 
 export const PRIVATE_VOTING_ABI = [

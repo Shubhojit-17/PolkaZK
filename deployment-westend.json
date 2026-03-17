@@ -2,15 +2,16 @@
   "network": "westend",
   "rpc": "https://westend-asset-hub-eth-rpc.polkadot.io",
   "deployer": "0x73704bf52A0897cBc35223bBCc7EB7eF55dF44b7",
-  "rustVerifier": "0x82280e886dfc57f4976c0b6ad5fe62bd667c254e",
-  "votingContract": "0xafa9560c0c67e0cb42e0dcf3e833a5fdac0b7d7f",
-  "timestamp": "2026-03-10T22:06:00.000Z",
+  "rustVerifier": "0xac32d86d7061C8dC4962e0e401459C079E3Ca7E3",
+  "votingContract": "0x47b6a6bb66eF206ca0D90Ead98b3d8Db6f406CFe",
+  "timestamp": "2026-03-12T07:40:10.895Z",
   "deployTxHashes": {
-    "rustVerifier": "0xf36119033b51ace9a9f9d28d3710c0a77390dd3c7a9762219b8713e2f41e7ef0",
-    "votingContract": "0xf69fbc4f84e9219c608fea6c727b1fd51f0954cbc591c8cb5bda9e314c05c446"
+    "rustVerifier": "0xcc0d5afa3ce779c39cc91523262ad5b2d946acc60dfefb5ffb5e2cb2c4e8a2f7",
+    "votingContract": "0x09c9df447167e97d8fc32522b6c592f06150f5840cf60e9a6176b7838dfafa00"
   },
-  "gasUsed": {
-    "rustVerifier": 3423081915,
-    "votingContract": 2648651727
-  }
+  "changes": [
+    "Rust verifier: added storeVerificationKey(bytes) + on-chain VK storage",
+    "PrivateVoting: removed onlyOwner from createProposal, added 60s cooldown",
+    "Nullifier now derived from voter secret, not wallet address"
+  ]
 }

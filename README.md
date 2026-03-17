@@ -6,6 +6,23 @@ A Groth16 ZK-SNARK verifier written in Rust, compiled to PolkaVM (RISC-V), with 
 
 ---
 
+## Hackathon Positioning
+
+This project is built for **Polkadot Solidity Hackathon 2026 - Track 2 (PVM Smart Contracts)**.
+
+### Why this fits Track 2
+
+- **PVM experiments**: Solidity contract (`PrivateVoting.sol`) calls a Rust verifier contract running on PolkaVM.
+- **Cross-language interoperability**: Ethereum ABI compatibility across Solidity and Rust (`alloy-core` `sol!`).
+- **Production-like dApp**: full governance workflow (proposal creation, private voting, results UI), not a toy contract.
+
+### Bonus fit areas
+
+- Security-first contract flow (nullifier-based double-vote prevention)
+- Frontend resiliency for current Westend RPC limitations
+
+---
+
 ## Architecture
 
 ```
@@ -79,6 +96,9 @@ PolkaZX/
 │   ├── deploy.js                    # Deploy both contracts via ethers.js
 │   ├── generate-proof.js            # Generate ZK proof with snarkjs
 │   └── integration-test.js          # End-to-end test pipeline
+├── docs/
+│   ├── DEMO_RUNBOOK.md              # 3-5 minute live demo script
+│   └── SUBMISSION_CHECKLIST.md      # Final submission checklist
 ├── test/
 │   └── circom/                      # Circom circuit + proof artifacts
 │       ├── multiply.circom          # Test circuit (a × b = c)
@@ -165,6 +185,19 @@ npm run dev
 ```
 
 Open http://localhost:3000 — connect your wallet, switch to Westend Asset Hub, and interact with the voting DApp.
+
+### Demo Shortcuts
+
+```bash
+# Prepare proof assets for demo
+npm run demo:prep
+
+# Run integration smoke flow on Westend
+npm run demo:smoke
+
+# Start frontend for live presentation
+npm run demo:frontend
+```
 
 ---
 
@@ -315,6 +348,64 @@ template Multiply() {
 ```
 
 Test case: prover knows $a = 3, b = 7$ such that $c = 21$ (public output).
+
+---
+
+## Security Model
+
+### On-chain protections
+
+- **Nullifier-based replay prevention**: each `(voter secret, proposalId)` nullifier can be used once.
+- **Proposal deadline enforcement**: votes rejected after proposal end.
+- **Verifier gating**: vote counted only after successful Rust verifier call.
+
+### Frontend protections
+
+- **Per-wallet vote lock**: each wallet can vote only once per proposal in UI flow.
+- **Persisted vote state**: vote choice is stored and restored per wallet/account.
+- **Session isolation**: proof session is reset on account change to avoid stale-authority leakage.
+
+---
+
+## Known RPC Limitations and Mitigations
+
+Westend Asset Hub EVM RPC currently has partial feature gaps (notably in read/log reliability).
+
+Observed limitations:
+
+- `eth_call` can return `CALL_EXCEPTION`/missing revert data on some contracts.
+- `eth_getCode` can return empty code for some deployed addresses.
+- Event logs may be incomplete in some receipts.
+
+Mitigations implemented:
+
+- Transaction-confirmed fallback when logs are missing.
+- Proposal and vote local cache hydration to preserve UX continuity.
+- Transaction-scanning fallback to reconstruct proposal/vote state.
+- Explicit UI status messaging for contract/RPC edge cases.
+
+---
+
+## Demo and Submission Assets
+
+- Demo flow script: `docs/DEMO_RUNBOOK.md`
+- Submission checklist: `docs/SUBMISSION_CHECKLIST.md`
+
+Recommended judge demo path:
+
+1. Connect wallet and generate/verify proof
+2. Create proposal
+3. Cast YES vote (wallet A)
+4. Cast NO vote (wallet B)
+5. Show results and activity updates
+
+---
+
+## Judging Criteria Mapping
+
+- **Technical Excellence**: Rust Groth16 verifier on PolkaVM + Solidity integration + working frontend.
+- **Real Product Potential**: private governance and anti-double-vote controls.
+- **Ecosystem Alignment**: built for Polkadot Hub using Solidity + PVM interoperability.
 
 ---
 

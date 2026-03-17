@@ -51,6 +51,12 @@ const OWNER_KEY: [u8; 32] = {
     key[31] = 2;
     key
 };
+// Slot 3: Verification key data (raw bytes, stored once)
+const VK_DATA_KEY: [u8; 32] = {
+    let mut key = [0u8; 32];
+    key[31] = 3;
+    key
+};
 
 // ─── Constructor ─────────────────────────────────────────────
 #[no_mangle]
@@ -89,6 +95,10 @@ pub extern "C" fn call() {
         // verify(bytes proof, bytes publicInputs) -> bool
         ZkVerifier::verifyCall::SELECTOR => {
             handle_verify(&call_data[4..]);
+        }
+        // storeVerificationKey(bytes vk)
+        ZkVerifier::storeVerificationKeyCall::SELECTOR => {
+            handle_store_vk(&call_data[4..]);
         }
         _ => {
             api::return_value(ReturnFlags::REVERT, b"Unknown function");
@@ -144,18 +154,22 @@ fn handle_verify(data: &[u8]) {
 
 /// Perform the actual ZK proof verification
 fn perform_verification(proof_bytes: &[u8], input_bytes: &[u8]) -> bool {
-    // Deserialize the proof
+    // Deserialize the proof (first 256 bytes)
     let proof = match groth16::deserialize_proof(proof_bytes) {
         Some(p) => p,
         None => return false,
     };
 
-    // The verification key is embedded in the proof bytes after the proof itself (256 bytes)
-    if proof_bytes.len() <= 256 {
-        // No VK embedded; for demo we expect VK appended after the proof
-        return false;
-    }
-    let vk = match groth16::deserialize_vk(&proof_bytes[256..]) {
+    // Get VK: prefer embedded in proof (backward compat), else read from storage
+    let vk = if proof_bytes.len() > 256 {
+        // Old format: VK appended after the 256-byte proof
+        groth16::deserialize_vk(&proof_bytes[256..])
+    } else {
+        // New format: read VK from on-chain storage
+        read_vk_from_storage()
+    };
+
+    let vk = match vk {
         Some(v) => v,
         None => return false,
     };
@@ -168,6 +182,21 @@ fn perform_verification(proof_bytes: &[u8], input_bytes: &[u8]) -> bool {
 
     // Run Groth16 verification
     groth16::verify(&vk, &proof, &public_inputs)
+}
+
+/// Read the verification key from on-chain storage
+fn read_vk_from_storage() -> Option<groth16::VerificationKey> {
+    let mut vk_buf = vec![0u8; 1024];
+    let mut vk_slice = vk_buf.as_mut_slice();
+    match api::get_storage(StorageFlags::empty(), &VK_DATA_KEY, &mut vk_slice) {
+        Ok(_) => {
+            if vk_slice.is_empty() {
+                return None;
+            }
+            groth16::deserialize_vk(vk_slice)
+        }
+        Err(_) => None,
+    }
 }
 
 /// Read a uint256 from ABI data and return as usize
@@ -211,6 +240,55 @@ fn emit_proof_verified(submitter: &[u8; 20], result: bool) {
     event_data[31] = if result { 1 } else { 0 };
 
     api::deposit_event(&topics, &event_data);
+}
+
+/// Handle the storeVerificationKey(bytes) call
+fn handle_store_vk(data: &[u8]) {
+    if data.len() < 32 {
+        api::return_value(ReturnFlags::REVERT, b"Invalid calldata");
+    }
+
+    let vk_offset = read_u256_as_usize(data, 0);
+    let vk_bytes = read_dynamic_bytes(data, vk_offset);
+
+    if vk_bytes.is_none() {
+        api::return_value(ReturnFlags::REVERT, b"Failed to decode VK");
+    }
+    let vk_bytes = vk_bytes.unwrap();
+
+    // Validate VK can be deserialized
+    if groth16::deserialize_vk(vk_bytes).is_none() {
+        api::return_value(ReturnFlags::REVERT, b"Invalid VK data");
+    }
+
+    // Store VK bytes in contract storage
+    api::set_storage(StorageFlags::empty(), &VK_DATA_KEY, vk_bytes);
+
+    // Store first 32 bytes as VK identifier
+    let mut vk_hash = [0u8; 32];
+    let copy_len = core::cmp::min(32, vk_bytes.len());
+    vk_hash[..copy_len].copy_from_slice(&vk_bytes[..copy_len]);
+    api::set_storage(StorageFlags::empty(), &VK_HASH_KEY, &vk_hash);
+
+    // Emit VerificationKeyStored event
+    let mut caller = [0u8; 20];
+    api::caller(&mut caller);
+    emit_vk_stored(&caller, &vk_hash);
+
+    // Return success (void function)
+    api::return_value(ReturnFlags::empty(), &[]);
+}
+
+/// Emit the VerificationKeyStored event
+fn emit_vk_stored(submitter: &[u8; 20], vk_hash: &[u8; 32]) {
+    let sig_topic = ZkVerifier::VerificationKeyStored::SIGNATURE_HASH.0;
+
+    let mut addr_topic = [0u8; 32];
+    addr_topic[12..32].copy_from_slice(submitter);
+
+    let topics = [sig_topic, addr_topic];
+
+    api::deposit_event(&topics, vk_hash);
 }
 
 /// Increment the verification counter in storage

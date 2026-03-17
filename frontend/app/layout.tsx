@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "PolkaZK — Private Voting on Polkadot",
-  description: "ZK-Proof private voting using Groth16 verification on PolkaVM",
+  description:
+    "Zero-knowledge private voting with Solidity + Rust verifier on PolkaVM.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -13,7 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

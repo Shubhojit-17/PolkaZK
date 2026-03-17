@@ -31,6 +31,9 @@ contract PrivateVoting {
     /// Track which nullifier hashes have been used (prevents double voting)
     mapping(bytes32 => bool) public nullifierUsed;
 
+    /// Anti-spam: track last proposal creation time per address
+    mapping(address => uint256) public lastProposalTime;
+
     // ─── Events ──────────────────────────────────────────────
 
     event ProposalCreated(uint256 indexed proposalId, string description, uint256 deadline);
@@ -47,6 +50,7 @@ contract PrivateVoting {
     error ProofVerificationFailed();
     error InvalidVerifierAddress();
     error VerifierCallFailed();
+    error ProposalCooldown();
 
     // ─── Constructor ─────────────────────────────────────────
 
@@ -72,7 +76,11 @@ contract PrivateVoting {
     function createProposal(
         string calldata description,
         uint256 durationSeconds
-    ) external onlyOwner returns (uint256) {
+    ) external returns (uint256) {
+        // Anti-spam: 60-second cooldown per address
+        if (block.timestamp < lastProposalTime[msg.sender] + 60) revert ProposalCooldown();
+        lastProposalTime[msg.sender] = block.timestamp;
+
         uint256 proposalId = proposalCount++;
         proposals[proposalId] = Proposal({
             description: description,
