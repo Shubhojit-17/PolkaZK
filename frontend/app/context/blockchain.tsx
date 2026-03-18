@@ -44,9 +44,14 @@ export interface TransactionEntry {
 
 // ─── localStorage persistence ─────────────────────────────────
 
-const STORAGE_KEY_SESSION = "polkazk-proof-session";
+const STORAGE_KEY_SESSION_PREFIX = "polkazk-proof-session";
+const LEGACY_STORAGE_KEY_SESSION = "polkazk-proof-session";
 const STORAGE_KEY_PROPOSALS_PREFIX = "polkazk-proposals";
 const STORAGE_KEY_VOTES_PREFIX = "polkazk-votes";
+
+const DEMO_PROOF_A = "3";
+const DEMO_PROOF_B = "7";
+const DEMO_PROOF_C = "21";
 
 interface ProofSession {
   proofHex: string;
@@ -68,20 +73,76 @@ interface PersistedProposal {
   isActive: boolean;
 }
 
-function saveProofSession(session: ProofSession) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session));
+function deriveIsActive(deadline: bigint, fallback: boolean): boolean {
+  if (deadline > BigInt(0)) {
+    return deadline > BigInt(Math.floor(Date.now() / 1000));
+  }
+  return fallback;
 }
 
-function loadProofSession(): ProofSession | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE_KEY_SESSION);
+function normalizeProposalStatuses(proposals: Proposal[]): Proposal[] {
+  return proposals.map((proposal) => ({
+    ...proposal,
+    isActive: deriveIsActive(proposal.deadline, proposal.isActive),
+  }));
+}
+
+function getProofSessionStorageKey(chainId: string, account: string): string {
+  return `${STORAGE_KEY_SESSION_PREFIX}:${chainId.toLowerCase()}:${account.toLowerCase()}`;
+}
+
+function parseProofSession(raw: string | null): ProofSession | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<ProofSession>;
+    if (
+      typeof parsed.account !== "string" ||
+      typeof parsed.proofHex !== "string" ||
+      typeof parsed.inputsHex !== "string" ||
+      typeof parsed.vkHex !== "string"
+    ) {
+      return null;
+    }
+    return {
+      proofHex: parsed.proofHex,
+      vkHex: parsed.vkHex,
+      inputsHex: parsed.inputsHex,
+      publicSignals: Array.isArray(parsed.publicSignals)
+        ? parsed.publicSignals.map((v) => String(v))
+        : [],
+      verifyTxHash: typeof parsed.verifyTxHash === "string" ? parsed.verifyTxHash : "",
+      vkStoreTxHash: typeof parsed.vkStoreTxHash === "string" ? parsed.vkStoreTxHash : "",
+      account: parsed.account,
+      timestamp: typeof parsed.timestamp === "number" ? parsed.timestamp : Date.now(),
+    };
   } catch {
     return null;
   }
+}
+
+function saveProofSession(chainId: string, account: string, session: ProofSession) {
+  if (typeof window === "undefined" || !chainId || !account) return;
+  localStorage.setItem(
+    getProofSessionStorageKey(chainId, account),
+    JSON.stringify(session)
+  );
+}
+
+function loadProofSession(chainId: string, account: string): ProofSession | null {
+  if (typeof window === "undefined" || !chainId || !account) return null;
+
+  const scopedKey = getProofSessionStorageKey(chainId, account);
+  const scopedSession = parseProofSession(localStorage.getItem(scopedKey));
+  if (scopedSession) return scopedSession;
+
+  const legacySession = parseProofSession(localStorage.getItem(LEGACY_STORAGE_KEY_SESSION));
+  if (!legacySession) return null;
+  if (legacySession.account.toLowerCase() !== account.toLowerCase()) return null;
+
+  // One-time migration from legacy global key to wallet+chain scoped key.
+  localStorage.setItem(scopedKey, JSON.stringify(legacySession));
+  localStorage.removeItem(LEGACY_STORAGE_KEY_SESSION);
+  return legacySession;
 }
 
 function getProposalsStorageKey(chainId: string): string {
@@ -118,7 +179,7 @@ function loadProposalsCache(chainId: string): Proposal[] {
         yesVotes: BigInt(proposal.yesVotes),
         noVotes: BigInt(proposal.noVotes),
         deadline: BigInt(proposal.deadline),
-        isActive: Boolean(proposal.isActive),
+        isActive: deriveIsActive(BigInt(proposal.deadline), Boolean(proposal.isActive)),
         userHasVoted: false,
         userVote: null,
       }))
@@ -168,9 +229,7 @@ function mergeProposals(remote: Proposal[], cached: Proposal[]): Proposal[] {
           : remoteProposal.description,
       deadline: remoteProposal.deadline === BigInt(0) && existing ? existing.deadline : remoteProposal.deadline,
       isActive:
-        remoteProposal.deadline > BigInt(0)
-          ? remoteProposal.deadline > BigInt(Math.floor(Date.now() / 1000))
-          : remoteProposal.isActive,
+        deriveIsActive(remoteProposal.deadline, remoteProposal.isActive),
       userHasVoted: Boolean(remoteProposal.userHasVoted || existing?.userHasVoted),
       userVote:
         typeof remoteProposal.userVote === "boolean"
@@ -212,6 +271,8 @@ const TX_OVERRIDES = {
 const EVENT_LOOKBACK_BLOCKS = 150000;
 const TX_SCAN_LOOKBACK_BLOCKS = 5000;
 const ACTIVITY_LOOKBACK_BLOCKS = 800;
+const ALLOWLISTED_PRIVATE_VOTING_FALLBACK =
+  "0x47b6a6bb66eF206ca0D90Ead98b3d8Db6f406CFe".toLowerCase();
 
 function getReadableError(err: any): string {
   const message =
@@ -227,6 +288,38 @@ function getReadableError(err: any): string {
 function isMetadataCallError(err: any): boolean {
   const msg = String(err?.info?.error?.message || err?.message || "");
   return msg.toLowerCase().includes("metadata error");
+}
+
+function isRecoverableProposalReadError(err: any): boolean {
+  const msg = String(
+    err?.shortMessage ||
+      err?.reason ||
+      err?.info?.error?.message ||
+      err?.message ||
+      ""
+  ).toLowerCase();
+  const code = String(err?.code || "").toUpperCase();
+
+  return (
+    code === "CALL_EXCEPTION" ||
+    msg.includes("missing revert data") ||
+    msg.includes("internal json-rpc error") ||
+    msg.includes("execution reverted") ||
+    msg.includes("metadata error")
+  );
+}
+
+async function getCodeWithTimeout(
+  readProvider: ethers.Provider,
+  address: string,
+  timeoutMs = 12000
+): Promise<string> {
+  return await Promise.race([
+    readProvider.getCode(address),
+    new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("getCode timeout")), timeoutMs)
+    ),
+  ]);
 }
 
 // ─── Context ──────────────────────────────────────────────────
@@ -264,7 +357,7 @@ interface BlockchainContextType {
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   switchToAssetHub: () => Promise<void>;
-  generateProof: (a: string, b: string, c: string) => Promise<boolean>;
+  generateProof: () => Promise<boolean>;
   storeVerificationKey: () => Promise<boolean>;
   verifyProof: () => Promise<boolean>;
   loadProposals: () => Promise<void>;
@@ -442,13 +535,37 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
       label: string
     ): Promise<boolean> => {
       try {
-        const code = await readProvider.getCode(address);
-        if (code === "0x") {
+        const primaryCode = await getCodeWithTimeout(readProvider, address);
+        if (primaryCode === "0x") {
+          // Some wallet RPC endpoints intermittently report empty code. Cross-check against
+          // the configured network RPC before declaring the contract missing.
+          try {
+            const fallbackProvider = new ethers.JsonRpcProvider(CHAIN_CONFIG.rpcUrl);
+            const fallbackCode = await getCodeWithTimeout(fallbackProvider, address, 12000);
+            if (fallbackCode !== "0x") {
+              return true;
+            }
+          } catch {
+            // Ignore fallback failures and use primary result.
+          }
+
+          // pallet-revive may still execute write txs even when eth_getCode returns 0x
+          // for Solidity contracts. Only allow this bypass for a strict allowlisted contract.
           if (label === "PrivateVoting") {
+            if (address.toLowerCase() !== ALLOWLISTED_PRIVATE_VOTING_FALLBACK) {
+              setStatus(
+                `PrivateVoting address ${address} is not allowlisted for RPC fallback. Update deployment config before proceeding.`
+              );
+              return false;
+            }
+            setStatus(
+              `RPC could not confirm ${label} bytecode at ${address}. Proceeding with transaction path.`
+            );
             return true;
           }
+
           setStatus(
-            `${label} is not deployed on the current network. Switch to ${CHAIN_CONFIG.chainName}.`
+            `${label} is not deployed at ${address} on the current network.`
           );
           return false;
         }
@@ -463,19 +580,20 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
 
   // ── Restore proof session from localStorage ──
 
-  const restoreSession = useCallback((addr: string) => {
-    const session = loadProofSession();
-    if (!session || session.account.toLowerCase() !== addr.toLowerCase()) {
-      resetProofState();
-      return;
-    }
+  const restoreSession = useCallback((addr: string, currentChainId: string) => {
+    resetProofState();
+    setTransactions([]);
+
+    const session = loadProofSession(currentChainId, addr);
+    if (!session) return;
+
     setProofHex(session.proofHex);
     setVkHex(session.vkHex);
     setInputsHex(session.inputsHex);
     setProofGenerated(true);
     if (session.verifyTxHash) {
       setLastVerifyTxHash(session.verifyTxHash);
-      setVerificationState("valid");
+      setVerificationState("idle");
       addTransaction("Proof Verified (restored)", session.verifyTxHash);
     }
     if (session.vkStoreTxHash) {
@@ -483,6 +601,34 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
       addTransaction("VK Stored (restored)", session.vkStoreTxHash);
     }
   }, [addTransaction, resetProofState]);
+
+  useEffect(() => {
+    if (!provider || !lastVerifyTxHash || !onExpectedChain()) return;
+
+    let cancelled = false;
+    const confirmVerificationTx = async () => {
+      try {
+        const receipt = await provider.getTransactionReceipt(lastVerifyTxHash);
+        if (cancelled) return;
+
+        if (receipt && receipt.status === 1 && receipt.blockNumber != null) {
+          setLastVerifyBlockNumber(receipt.blockNumber);
+          setVerificationState("valid");
+          return;
+        }
+
+        // Keep proof data, but do not show as verified unless chain confirmation exists.
+        setVerificationState("idle");
+      } catch {
+        // Do not hard-fail UI if RPC cannot fetch receipt immediately.
+      }
+    };
+
+    confirmVerificationTx();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, lastVerifyTxHash, onExpectedChain]);
 
   // ── wallet ──
 
@@ -508,12 +654,13 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
       const sig = await prov.getSigner();
       const addr = await sig.getAddress();
       const network = await prov.getNetwork();
+      const connectedChainId = "0x" + network.chainId.toString(16);
       setProvider(prov);
       setSigner(sig);
       setAccount(addr);
-      setChainId("0x" + network.chainId.toString(16));
+      setChainId(connectedChainId);
       setStatus(`Connected: ${addr.slice(0, 6)}...${addr.slice(-4)}`);
-      restoreSession(addr);
+      restoreSession(addr, connectedChainId);
     } catch (err: any) {
       setStatus(`Connection failed: ${err.message}`);
     } finally {
@@ -550,12 +697,13 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
           const sig = await prov.getSigner();
           const addr = await sig.getAddress();
           const network = await prov.getNetwork();
+          const connectedChainId = "0x" + network.chainId.toString(16);
           setProvider(prov);
           setSigner(sig);
           setAccount(addr);
-          setChainId("0x" + network.chainId.toString(16));
+          setChainId(connectedChainId);
           setStatus(`Connected: ${addr.slice(0, 6)}...${addr.slice(-4)}`);
-          restoreSession(addr);
+          restoreSession(addr, connectedChainId);
         }
       })
       .catch(() => {});
@@ -576,20 +724,27 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
         const sig = await prov.getSigner();
         const addr = await sig.getAddress();
         const network = await prov.getNetwork();
+        const connectedChainId = "0x" + network.chainId.toString(16);
         setProvider(prov);
         setSigner(sig);
         setAccount(addr);
-        setChainId("0x" + network.chainId.toString(16));
+        setChainId(connectedChainId);
         setStatus(`Connected: ${addr.slice(0, 6)}...${addr.slice(-4)}`);
-        restoreSession(addr);
+        restoreSession(addr, connectedChainId);
       } catch (err: any) {
         setStatus(`Account change handling failed: ${getReadableError(err)}`);
       }
     };
 
     const handleChainChanged = (nextChainId: string) => {
-      setChainId(nextChainId.toLowerCase());
+      const normalizedChainId = nextChainId.toLowerCase();
+      setChainId(normalizedChainId);
       setProposals([]);
+      setTransactions([]);
+      resetProofState();
+      if (account) {
+        restoreSession(account, normalizedChainId);
+      }
       if (nextChainId.toLowerCase() !== CHAIN_CONFIG.chainId.toLowerCase()) {
         setStatus(`Wrong network. Switch to ${CHAIN_CONFIG.chainName}.`);
       }
@@ -606,7 +761,7 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
         ethereum.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, [disconnectWallet, restoreSession]);
+  }, [account, disconnectWallet, resetProofState, restoreSession]);
 
   const switchToAssetHub = useCallback(async () => {
     const ethereum = (window as any).ethereum;
@@ -637,7 +792,7 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
   // ── Real proof generation using snarkjs in-browser ──
 
   const generateProof = useCallback(
-    async (a: string, b: string, c: string): Promise<boolean> => {
+    async (): Promise<boolean> => {
       try {
         setLoading(true);
         setStatus("Loading snarkjs...");
@@ -645,9 +800,9 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
         const snarkjs = await import("snarkjs");
 
         setStatus("Loading circuit WASM and proving key...");
-        const input = { a, b, c };
+        const input = { a: DEMO_PROOF_A, b: DEMO_PROOF_B, c: DEMO_PROOF_C };
 
-        setStatus(`Generating Groth16 proof for ${a} × ${b} = ${c}...`);
+        setStatus(`Generating Groth16 proof for ${DEMO_PROOF_A} × ${DEMO_PROOF_B} = ${DEMO_PROOF_C}...`);
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
           input,
           "/multiply.wasm",
@@ -684,8 +839,8 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
         setVerificationState("idle");
 
         // Persist proof data (without verification tx yet)
-        if (account) {
-          saveProofSession({
+        if (account && chainId) {
+          saveProofSession(chainId, account, {
             proofHex: proofHexVal,
             vkHex: vkHexVal,
             inputsHex: inputsHexVal,
@@ -708,7 +863,7 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [account]
+    [account, chainId]
   );
 
   // ── VK storage ──
@@ -739,10 +894,10 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
       setVkStored(true);
 
       // Update persisted session with VK store tx hash
-      const session = loadProofSession();
+      const session = loadProofSession(chainId, account);
       if (session) {
         session.vkStoreTxHash = receipt.hash;
-        saveProofSession(session);
+        saveProofSession(chainId, account, session);
       }
 
       return true;
@@ -754,6 +909,8 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
   }, [
     signer,
     provider,
+    chainId,
+    account,
     vkHex,
     addTransaction,
     onExpectedChain,
@@ -847,10 +1004,10 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
 
         // Persist the verification tx hash
         if (success) {
-          const session = loadProofSession();
+          const session = loadProofSession(chainId, account);
           if (session) {
             session.verifyTxHash = receipt.hash;
-            saveProofSession(session);
+            saveProofSession(chainId, account, session);
           }
         }
 
@@ -866,6 +1023,8 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
     [
       signer,
       provider,
+      chainId,
+      account,
       proofHex,
       inputsHex,
       vkHex,
@@ -1112,7 +1271,8 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
     try {
       const cachedProposals = loadProposalsCache(chainId);
       if (cachedProposals.length > 0) {
-        setProposals(applyLocalVoteState(cachedProposals, chainId, account));
+        const normalizedCached = normalizeProposalStatuses(cachedProposals);
+        setProposals(applyLocalVoteState(normalizedCached, chainId, account));
       }
 
       const canRead = await ensureContractDeployed(
@@ -1187,14 +1347,16 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
           setStatus("Loaded proposals from local cache while chain history is unavailable.");
         }
       } catch (readErr: any) {
-        if (isMetadataCallError(readErr)) {
+        if (isRecoverableProposalReadError(readErr)) {
           const propsFromLogs = await loadProposalsFromLogs();
           if (propsFromLogs.length > 0) {
             const merged = mergeProposals(propsFromLogs, cachedProposals);
             const hydrated = applyLocalVoteState(merged, chainId, account);
             setProposals(hydrated);
             saveProposalsCache(chainId, merged);
-            setStatus("Loaded proposals from on-chain logs (direct reads unavailable on this RPC adapter).");
+            setStatus(
+              "Loaded proposals from on-chain logs (contract read call failed on current RPC)."
+            );
             return;
           }
 
@@ -1204,12 +1366,14 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
           setProposals(hydrated);
           if (merged.length > 0) {
             saveProposalsCache(chainId, merged);
-            setStatus("Loaded proposals from on-chain transactions (read APIs unavailable on this RPC adapter).");
+            setStatus(
+              "Loaded proposals from on-chain transactions (contract read call failed on current RPC)."
+            );
           } else if (cachedProposals.length > 0) {
             setStatus("Loaded proposals from local cache while chain reads are unavailable.");
           } else {
             setStatus(
-              `No proposals found for ${CONTRACTS.privateVoting} in the last ${TX_SCAN_LOOKBACK_BLOCKS} blocks.`
+              `No proposals found for ${CONTRACTS.privateVoting}. If this is unexpected, verify NEXT_PUBLIC_VOTING_CONTRACT and deployment addresses.`
             );
           }
           return;
@@ -1360,13 +1524,13 @@ export function BlockchainProvider({ children }: { children: ReactNode }) {
 
         if (!proofHex || !inputsHex) {
           setStatus("Generating eligibility proof...");
-          const generated = await generateProof("3", "7", "21");
+          const generated = await generateProof();
           if (!generated) {
             setStatus("Could not generate proof. Please generate proof manually in Dashboard.");
             return false;
           }
 
-          const session = loadProofSession();
+          const session = loadProofSession(chainId, account);
           if (session && session.account.toLowerCase() === account.toLowerCase()) {
             effectiveProofHex = session.proofHex;
             effectiveInputsHex = session.inputsHex;

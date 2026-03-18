@@ -8,6 +8,8 @@ import { StatusBadge } from "../components/StatusBadge";
 import { getExplorerActivityUrl } from "../lib/explorer";
 
 const CIRCUIT_PUBLIC_OUTPUT = "21";
+const DEMO_PROOF_A = "3";
+const DEMO_PROOF_B = "7";
 
 export default function VerifyPage() {
   const {
@@ -26,8 +28,6 @@ export default function VerifyPage() {
 
   const [logs, setLogs] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [inputA, setInputA] = useState("3");
-  const [inputB, setInputB] = useState("7");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,28 +43,19 @@ export default function VerifyPage() {
       return;
     }
 
-    const a = inputA.trim();
-    const b = inputB.trim();
-    const product = (parseInt(a) * parseInt(b)).toString();
-
-    if (!a || !b || isNaN(parseInt(a)) || isNaN(parseInt(b))) {
-      addLog("✗ Invalid inputs — please enter valid numbers.");
-      return;
-    }
-    if (product !== CIRCUIT_PUBLIC_OUTPUT) {
-      addLog(`✗ ${a} × ${b} = ${product}, but circuit requires product = ${CIRCUIT_PUBLIC_OUTPUT}`);
-      return;
-    }
+    const a = DEMO_PROOF_A;
+    const b = DEMO_PROOF_B;
+    const product = CIRCUIT_PUBLIC_OUTPUT;
 
     setIsGenerating(true);
     setLogs([]);
-    addLog(`Starting proof generation with private inputs (a=${a}, b=${b})...`);
-    addLog(`Public constraint: a × b = ${CIRCUIT_PUBLIC_OUTPUT}`);
+    addLog(`Starting local fixed demo proof generation (a=${a}, b=${b})...`);
+    addLog(`Locked public constraint: a × b = ${CIRCUIT_PUBLIC_OUTPUT}`);
 
-    const success = await generateProof(a, b, product);
+    const success = await generateProof();
 
     if (success) {
-      addLog("Groth16 proof generated and locally verified ✓");
+      addLog("Groth16 proof generated and locally verified in browser ✓");
       addLog(`Proof size: 256 bytes | Public output: [${product}]`);
       addLog("Ready for on-chain verification.");
     } else {
@@ -72,7 +63,7 @@ export default function VerifyPage() {
     }
 
     setIsGenerating(false);
-  }, [generateProof, verifyProof, proofGenerated, inputA, inputB]);
+  }, [generateProof, verifyProof, proofGenerated]);
 
   const isVerifying = verificationState === "verifying";
   const isValid = verificationState === "valid";
@@ -118,7 +109,7 @@ export default function VerifyPage() {
         className="w-full max-w-4xl"
       >
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-4 tracking-tight">Voter Eligibility Verification</h1>
+          <h1 className="text-4xl font-bold mb-4 tracking-tight">Local Proof + On-Chain Verification</h1>
           <p className="text-white/60 text-lg max-w-2xl mx-auto">
             Generate a ZK proof to prove your eligibility to vote, then verify it on-chain via the Rust verifier on PolkaVM.
             Once verified, you can cast private votes on any active proposal.
@@ -190,7 +181,7 @@ export default function VerifyPage() {
                 <span className="w-3 h-3 rounded-full bg-red-500/50" />
                 <span className="w-3 h-3 rounded-full bg-amber-500/50" />
                 <span className="w-3 h-3 rounded-full bg-[#10B981]/50" />
-                <span className="text-white/40 text-xs ml-2">zk-prover — eligibility proof</span>
+                <span className="text-white/40 text-xs ml-2">zk-prover — local proof generation</span>
               </div>
 
               {/* Terminal Body */}
@@ -198,26 +189,16 @@ export default function VerifyPage() {
                 {/* Private input fields */}
                 {!proofGenerated && !isGenerating && (
                   <div className="mb-3 pb-3 border-b border-white/10">
-                    <div className="text-xs text-white/50 mb-2">Private Inputs (prove you know factors of {CIRCUIT_PUBLIC_OUTPUT}):</div>
+                    <div className="text-xs text-white/50 mb-2">Fixed demo statement (locked):</div>
                     <div className="flex gap-3 items-center">
                       <div className="flex items-center gap-1">
                         <span className="text-white/40 text-xs">a =</span>
-                        <input
-                          type="number"
-                          value={inputA}
-                          onChange={(e) => setInputA(e.target.value)}
-                          className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs font-mono focus:outline-none focus:border-[#8B5CF6]/50"
-                        />
+                        <span className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs font-mono text-center">{DEMO_PROOF_A}</span>
                       </div>
                       <span className="text-white/30">×</span>
                       <div className="flex items-center gap-1">
                         <span className="text-white/40 text-xs">b =</span>
-                        <input
-                          type="number"
-                          value={inputB}
-                          onChange={(e) => setInputB(e.target.value)}
-                          className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs font-mono focus:outline-none focus:border-[#8B5CF6]/50"
-                        />
+                        <span className="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-xs font-mono text-center">{DEMO_PROOF_B}</span>
                       </div>
                       <span className="text-white/30">=</span>
                       <span className="text-[#10B981] text-xs font-mono font-bold">{CIRCUIT_PUBLIC_OUTPUT}</span>

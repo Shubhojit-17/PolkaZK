@@ -4,14 +4,5 @@
   "deployer": "0x73704bf52A0897cBc35223bBCc7EB7eF55dF44b7",
   "rustVerifier": "0xac32d86d7061C8dC4962e0e401459C079E3Ca7E3",
   "votingContract": "0x47b6a6bb66eF206ca0D90Ead98b3d8Db6f406CFe",
-  "timestamp": "2026-03-12T07:40:10.895Z",
-  "deployTxHashes": {
-    "rustVerifier": "0xcc0d5afa3ce779c39cc91523262ad5b2d946acc60dfefb5ffb5e2cb2c4e8a2f7",
-    "votingContract": "0x09c9df447167e97d8fc32522b6c592f06150f5840cf60e9a6176b7838dfafa00"
-  },
-  "changes": [
-    "Rust verifier: added storeVerificationKey(bytes) + on-chain VK storage",
-    "PrivateVoting: removed onlyOwner from createProposal, added 60s cooldown",
-    "Nullifier now derived from voter secret, not wallet address"
-  ]
+  "timestamp": "2026-03-18T10:13:22.850Z"
 }

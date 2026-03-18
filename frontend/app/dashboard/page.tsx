@@ -16,9 +16,11 @@ function ProofGeneratorTerminal() {
   const { generateProof, proofGenerated, status, verificationState, lastVerifyTxHash } = useBlockchain();
   const [logs, setLogs] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [inputA, setInputA] = useState("3");
-  const [inputB, setInputB] = useState("7");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const DEMO_A = "3";
+  const DEMO_B = "7";
+  const DEMO_C = "21";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,32 +40,19 @@ function ProofGeneratorTerminal() {
     if (!proofGenerated || logs.length > 0) return;
     if (verificationState === "valid" && lastVerifyTxHash) {
       setLogs([
-        "Restored existing proof from session",
+        "Restored local proof from browser session",
         `On-chain verification found: ${lastVerifyTxHash.slice(0, 12)}...`,
       ]);
       return;
     }
-    setLogs(["Restored existing proof from session"]);
+    setLogs(["Restored local proof from browser session"]);
   }, [proofGenerated, verificationState, lastVerifyTxHash, logs.length]);
 
   const handleGenerate = useCallback(async () => {
-    const a = inputA.trim();
-    const b = inputB.trim();
-    const product = (parseInt(a) * parseInt(b)).toString();
-
-    if (!a || !b || isNaN(parseInt(a)) || isNaN(parseInt(b))) {
-      setLogs((prev) => [...prev, "✗ Invalid inputs"]);
-      return;
-    }
-    if (product !== "21") {
-      setLogs((prev) => [...prev, `✗ ${a} × ${b} = ${product}, need product = 21`]);
-      return;
-    }
-
     setIsGenerating(true);
-    setLogs([`Generating proof for ${a} × ${b} = ${product}...`]);
+    setLogs([`Generating local fixed demo proof for ${DEMO_A} × ${DEMO_B} = ${DEMO_C}...`]);
 
-    const success = await generateProof(a, b, product);
+    const success = await generateProof();
 
     if (success) {
       setLogs((prev) => [...prev, "Proof ready ✓"]);
@@ -71,37 +60,27 @@ function ProofGeneratorTerminal() {
       setLogs((prev) => [...prev, "✗ Proof generation failed"]);
     }
     setIsGenerating(false);
-  }, [generateProof, inputA, inputB]);
+  }, [generateProof]);
 
   return (
     <GlassCard className="flex flex-col flex-1 p-0 bg-[#0A0A0B]/80 border-white/5 font-mono text-sm min-h-[280px]">
       <div className="flex items-center gap-2 px-4 py-3 bg-white/5 border-b border-white/5">
         <span className="text-white/40 text-xs">⌘</span>
-        <span className="text-white/40 text-xs">zk-prover node</span>
+        <span className="text-white/40 text-xs">zk-prover node (local)</span>
       </div>
       <div className="flex-1 p-4 overflow-y-auto custom-scrollbar flex flex-col gap-1.5">
         {/* Private input fields */}
         {!proofGenerated && !isGenerating && (
           <div className="mb-2 pb-2 border-b border-white/10">
-            <div className="text-xs text-white/50 mb-1.5">Private inputs (factors of 21):</div>
+            <div className="text-xs text-white/50 mb-1.5">Fixed demo statement (locked):</div>
             <div className="flex gap-2 items-center">
-              <span className="text-white/40 text-xs">a=</span>
-              <input
-                type="number"
-                value={inputA}
-                onChange={(e) => setInputA(e.target.value)}
-                className="w-14 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white text-xs font-mono focus:outline-none focus:border-[#8B5CF6]/50"
-              />
+              <span className="text-white/40 text-xs">a =</span>
+              <span className="w-14 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white text-xs font-mono text-center">{DEMO_A}</span>
               <span className="text-white/30">×</span>
-              <span className="text-white/40 text-xs">b=</span>
-              <input
-                type="number"
-                value={inputB}
-                onChange={(e) => setInputB(e.target.value)}
-                className="w-14 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white text-xs font-mono focus:outline-none focus:border-[#8B5CF6]/50"
-              />
+              <span className="text-white/40 text-xs">b =</span>
+              <span className="w-14 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white text-xs font-mono text-center">{DEMO_B}</span>
               <span className="text-white/30">=</span>
-              <span className="text-[#10B981] text-xs font-mono font-bold">21</span>
+              <span className="text-[#10B981] text-xs font-mono font-bold">{DEMO_C}</span>
             </div>
           </div>
         )}
@@ -136,10 +115,10 @@ function ProofGeneratorTerminal() {
           size="sm"
         >
           {isGenerating
-            ? "Generating Proof..."
+            ? "Generating Local Proof..."
             : proofGenerated
-            ? "✓ Proof Ready"
-            : "Generate ZK Proof"}
+            ? "✓ Local Proof Ready"
+            : "Generate Local ZK Proof"}
         </Button>
       </div>
     </GlassCard>
@@ -243,7 +222,7 @@ function ExecutionEngine() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              Proof Validated
+              On-Chain Proof Validated
               {lastVerifyTxHash && (
                 <span className="text-white/40 ml-1">
                   {lastVerifyTxHash.slice(0, 8)}...
@@ -265,15 +244,15 @@ function ExecutionEngine() {
         {isVerifying
           ? "Verifying on PolkaVM..."
           : isValid
-          ? "✓ Proof Verified"
+          ? "✓ On-Chain Proof Verified"
           : !proofGenerated
-          ? "Generate proof first"
-          : "Submit Proof for Verification"}
+          ? "Generate local proof first"
+          : "Submit Proof for On-Chain Verification"}
       </Button>
 
       {proofGenerated && !isValid && (
         <p className="text-xs text-white/50 font-mono text-center">
-          Proof is ready. Submit for on-chain verification to unlock voting.
+          Local proof is ready. Submit for on-chain verification to unlock voting.
         </p>
       )}
 
@@ -467,7 +446,7 @@ export default function DashboardPage() {
           </GlassCard>
 
           {/* Proof Generator Terminal */}
-          <ProofGeneratorTerminal />
+          <ProofGeneratorTerminal key={`${chainId || "no-chain"}:${account || "no-account"}`} />
         </div>
 
         {/* ── Center Column: Execution Engine (50%) ── */}

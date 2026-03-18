@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { useBlockchain } from "../context/blockchain";
 import { GlassCard } from "../components/GlassCard";
@@ -23,11 +23,26 @@ const COLORS = ["#10B981", "#EF4444"];
 export default function ResultsPage() {
   const { proposals, loadProposals, provider, transactions } = useBlockchain();
 
-  const activeProposals = proposals.filter((p) => p.isActive);
-  const closedProposals = proposals.filter((p) => !p.isActive);
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+
+  const isProposalClosed = (proposal: { deadline: bigint; isActive: boolean }) => {
+    if (proposal.deadline > BigInt(0)) {
+      return Number(proposal.deadline) <= nowSec;
+    }
+    return !proposal.isActive;
+  };
+
+  const activeProposals = useMemo(
+    () => proposals.filter((p) => !isProposalClosed(p)),
+    [proposals, nowSec]
+  );
+  const closedProposals = useMemo(
+    () => proposals.filter((p) => isProposalClosed(p)),
+    [proposals, nowSec]
+  );
 
   const getRemainingText = (deadline: bigint) => {
-    const remaining = Number(deadline) - Math.floor(Date.now() / 1000);
+    const remaining = Number(deadline) - nowSec;
     if (remaining <= 0) return "ending now";
     const hours = Math.floor(remaining / 3600);
     const minutes = Math.floor((remaining % 3600) / 60);
@@ -36,6 +51,21 @@ export default function ResultsPage() {
 
   useEffect(() => {
     if (provider) loadProposals();
+  }, [provider, loadProposals]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowSec(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!provider) return;
+    const refreshTimer = setInterval(() => {
+      loadProposals();
+    }, 30000);
+    return () => clearInterval(refreshTimer);
   }, [provider, loadProposals]);
 
   if (proposals.length === 0) {
