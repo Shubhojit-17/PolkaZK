@@ -186,6 +186,30 @@ npm run dev
 
 Open http://localhost:3000 — connect your wallet, switch to Westend Asset Hub, and interact with the voting DApp.
 
+### 8. Deploy Frontend on Vercel
+
+This project is deployed to Vercel as a frontend-only app.
+
+Use these settings in Vercel:
+
+- Import the GitHub repository.
+- Framework preset: Next.js
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Install Command: `npm install`
+
+Environment variables to add in Vercel (Production/Preview):
+
+- `NEXT_PUBLIC_RUST_VERIFIER`
+- `NEXT_PUBLIC_VOTING_CONTRACT`
+
+Use `frontend/.env.example` as the source template for these values.
+
+Notes:
+
+- Do not set `PRIVATE_KEY` in Vercel for frontend deploys.
+- You do not need to deploy a backend service for the current app architecture.
+
 ### Demo Shortcuts
 
 ```bash

@@ -38,6 +38,7 @@ broadcast/
 *.ptau
 *.zkey
 *.wtns
+!frontend/public/multiply_final.zkey
 
 # Generated PAPI descriptors
 .papi/
